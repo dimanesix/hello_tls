@@ -93,13 +93,20 @@ class Group(Enum):
     brainpoolP256r1tls13 = b'\x00\x1f'
     brainpoolP384r1tls13 = b'\x00\x20'
     brainpoolP512r1tls13 = b'\x00\x21'
-    GC256A = b'\x00\x22'
-    GC256B = b'\x00\x23'
-    GC256C = b'\x00\x24'
-    GC256D = b'\x00\x25'
-    GC512A = b'\x00\x26'
-    GC512B = b'\x00\x27'
-    GC512C = b'\x00\x28'
+    GC256Atls13 = b'\x00\x22'
+    GC256Btls13 = b'\x00\x23'
+    GC256Ctls13 = b'\x00\x24'
+    GC256Dtls13 = b'\x00\x25'
+    GC512Atls13 = b'\x00\x26'
+    GC512Btls13 = b'\x00\x27'
+    GC512Ctls13 = b'\x00\x28'
+    GC256A = b'\x00\x34'
+    GC256B = b'\x00\x35'
+    GC256C = b'\x00\x36'
+    GC256D = b'\x00\x37'
+    GC512A = b'\x00\x38'
+    GC512B = b'\x00\x39'
+    GC512C = b'\x00\x40'
     curveSM2 = b'\x00\x29'
     ffdhe2048 = b'\x01\x00'
     ffdhe3072 = b'\x01\x01'
@@ -252,6 +259,11 @@ class CipherSuite(Enum):
     TLS_CHACHA20_POLY1305_SHA256 = b"\x13\x03", (Protocol.TLS1_3,)
     TLS_AES_128_CCM_SHA256 = b"\x13\x04", (Protocol.TLS1_3,)
     TLS_AES_128_CCM_8_SHA256 = b"\x13\x05", (Protocol.TLS1_3,)
+    # add rus crypto: https://www.ietf.org/archive/id/draft-smyshlyaev-tls13-gost-suites-08.html
+    TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L = b"\xC1\x03", (Protocol.TLS1_3,)
+    TLS_GOSTR341112_256_WITH_MAGMA_MGM_L = b"\xC1\x04", (Protocol.TLS1_3,)
+    TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S = b"\xC1\x05", (Protocol.TLS1_3,)
+    TLS_GOSTR341112_256_WITH_MAGMA_MGM_S = b"\xC1\x06", (Protocol.TLS1_3,)
 
     # Cipher suite that had its number reassigned.
     OLD_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256  = b'\xcc\x13'
@@ -492,11 +504,11 @@ class CipherSuite(Enum):
     TLS_ECDHE_RSA_WITH_RC4_128_SHA = b'\xC0\x11' # [RFC8422][RFC6347]
     TLS_GOSTR341112_256_WITH_28147_CNT_IMIT = b'\xC1\x02' # [RFC9189]
     TLS_GOSTR341112_256_WITH_KUZNYECHIK_CTR_OMAC = b'\xC1\x00' # [RFC9189]
-    TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L = b'\xC1\x03' # [RFC9367]
-    TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S = b'\xC1\x05' # [RFC9367]
+    #TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L = b'\xC1\x03' # [RFC9367] ONLY in TLS 1.3
+    #TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S = b'\xC1\x05' # [RFC9367] ONLY in TLS 1.3
     TLS_GOSTR341112_256_WITH_MAGMA_CTR_OMAC = b'\xC1\x01' # [RFC9189]
-    TLS_GOSTR341112_256_WITH_MAGMA_MGM_L = b'\xC1\x04' # [RFC9367]
-    TLS_GOSTR341112_256_WITH_MAGMA_MGM_S = b'\xC1\x06' # [RFC9367]
+    #TLS_GOSTR341112_256_WITH_MAGMA_MGM_L = b'\xC1\x04' # [RFC9367] ONLY in TLS 1.3
+    #TLS_GOSTR341112_256_WITH_MAGMA_MGM_S = b'\xC1\x06' # [RFC9367] ONLY in TLS 1.3
     TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5 = b'\x00\x29' # [RFC2712]
     TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA = b'\x00\x26' # [RFC2712]
     TLS_KRB5_EXPORT_WITH_RC2_CBC_40_MD5 = b'\x00\x2A' # [RFC2712]

@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 import logging
 
-from .names_and_numbers import Protocol, RecordType, HandshakeType, CompressionMethod, CipherSuite, ExtensionType, Group, AlertLevel, AlertDescription, PskKeyExchangeMode
+from names_and_numbers import Protocol, RecordType, HandshakeType, CompressionMethod, CipherSuite, ExtensionType, Group, AlertLevel, AlertDescription, PskKeyExchangeMode
 
 logger = logging.getLogger(__name__)
 
@@ -224,6 +224,17 @@ def make_client_hello(client_hello: ClientHello) -> bytes:
                             0x06, 0x01, # RSA-PKCS1-SHA512
                             0x02, 0x01, # RSA-PKCS1-SHA1
                             0x02, 0x03, # ECDSA-SHA1
+                            # add rus crypto signature https://www.ietf.org/archive/id/draft-smyshlyaev-tls13-gost-suites-08.html
+                            0x07, 0x03, # gostr34102012_256a
+                            0x07, 0x0A, # gostr34102012_256b
+                            0x07, 0x0B, # gostr34102012_256c
+                            0x07, 0x0C, # gostr34102012_256d
+                            0x07, 0x0D, # gostr34102012_512a
+                            0x07, 0x0E, # gostr34102012_512b
+                            0x07, 0x0F, # gostr34102012_512c
+                            # https://www.ietf.org/rfc/rfc9189.html
+                            0x08, 0x40, # gostr34102012_256
+                            0x08, 0x41, # gostr34102012_512
                         ])
 
                 octets.extend(ExtensionType.signed_certificate_timestamp.value)

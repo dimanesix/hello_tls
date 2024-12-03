@@ -1,6 +1,6 @@
-from .scan import scan_server, ScanError, DEFAULT_TIMEOUT, DEFAULT_MAX_WORKERS, parse_target, ConnectionSettings, to_json_obj
-from .protocol import ClientHello
-from .names_and_numbers import Protocol
+from scan import scan_server, ScanError, DEFAULT_TIMEOUT, DEFAULT_MAX_WORKERS, parse_target, ConnectionSettings, to_json_obj
+from protocol import ClientHello
+from names_and_numbers import Protocol
 
 import os
 import sys

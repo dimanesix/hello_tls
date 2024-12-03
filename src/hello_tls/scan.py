@@ -7,8 +7,8 @@ from urllib.parse import urlparse
 
 import dataclasses
 from datetime import datetime, timezone
-from .protocol import ClientHello, ScanError, make_client_hello, parse_server_hello, ServerAlertError, BadServerResponse, ServerHello, logger
-from .names_and_numbers import AlertDescription, CipherSuite, Group, Protocol, CompressionMethod
+from protocol import ClientHello, ScanError, make_client_hello, parse_server_hello, ServerAlertError, BadServerResponse, ServerHello, logger
+from names_and_numbers import AlertDescription, CipherSuite, Group, Protocol, CompressionMethod
 
 # Default number of workers/threads/concurrent connections to use.
 DEFAULT_MAX_WORKERS: int = 6
