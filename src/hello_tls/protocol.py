@@ -1,7 +1,9 @@
+import datetime
 from typing import Iterator, List, Sequence, Optional, Iterable, Callable, Tuple
 from contextlib import contextmanager
 from dataclasses import dataclass
 import logging
+import random
 
 from names_and_numbers import Protocol, RecordType, HandshakeType, CompressionMethod, CipherSuite, ExtensionType, Group, AlertLevel, AlertDescription, PskKeyExchangeMode
 
@@ -144,11 +146,14 @@ def make_client_hello(client_hello: ClientHello) -> bytes:
         
         with prefix_length('Client Hello', width_bytes=3):
             octets.extend(min(Protocol.TLS1_2, max(client_hello.protocols)).value) # Legacy client version: max TLS 1.2.
-            octets.extend(32*[0x07]) # Random. Any value will do.
+            octets.extend((int(datetime.datetime.now(datetime.UTC).timestamp())).to_bytes(4, 'big')) # Timestamp
+            octets.extend(random.randbytes(28)) # Random.
 
             with prefix_length('session ID', width_bytes=1):
-                octets.extend(32*[0x07]) # Legacy session ID. Any value will do.
-
+                pass
+                #octets.extend(32*[0x00]) # Legacy session ID. Any value will do.
+                #octets.extend(32*[0x07])
+                #octets.extend(b'\x00') #  length 0
             with prefix_length('cipher Suites'):
                 for cipher_suite in client_hello.cipher_suites:
                     octets.extend(cipher_suite.value)
@@ -224,7 +229,7 @@ def make_client_hello(client_hello: ClientHello) -> bytes:
                             0x06, 0x01, # RSA-PKCS1-SHA512
                             0x02, 0x01, # RSA-PKCS1-SHA1
                             0x02, 0x03, # ECDSA-SHA1
-                            # add rus crypto signature https://www.ietf.org/archive/id/draft-smyshlyaev-tls13-gost-suites-08.html
+                            # https://www.ietf.org/archive/id/draft-smyshlyaev-tls13-gost-suites-08.html
                             0x07, 0x03, # gostr34102012_256a
                             0x07, 0x0A, # gostr34102012_256b
                             0x07, 0x0B, # gostr34102012_256c
@@ -233,8 +238,11 @@ def make_client_hello(client_hello: ClientHello) -> bytes:
                             0x07, 0x0E, # gostr34102012_512b
                             0x07, 0x0F, # gostr34102012_512c
                             # https://www.ietf.org/rfc/rfc9189.html
+                            0xEE, 0xEE, # gostr34102012_256_old
                             0x08, 0x40, # gostr34102012_256
+                            0xEF, 0xEF, # gostr34102012_512_old
                             0x08, 0x41, # gostr34102012_512
+                            0xED, 0xED, # ?
                         ])
 
                 octets.extend(ExtensionType.signed_certificate_timestamp.value)
@@ -254,7 +262,9 @@ def make_client_hello(client_hello: ClientHello) -> bytes:
                     with prefix_length('pre_shared_key_modes list', width_bytes=1):
                         octets.extend(PskKeyExchangeMode.psk_dhe_ke.value)
 
-                # Add empty key_share extension
+                #uncommented code if you want to check anti man-in-the-middle protect support
+                #octets.extend(ExtensionType.renegotiation_info.value)
+
                 # https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.8
                 # "This vector MAY be empty if the client is requesting a HelloRetryRequest. ... Clients MUST
                 # NOT offer any KeyShareEntry values for groups not listed in the client's "supported_groups"

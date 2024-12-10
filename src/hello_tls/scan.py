@@ -56,10 +56,10 @@ def make_socket(settings: ConnectionSettings) -> socket.socket:
         if not settings.proxy.startswith('http://'):
             raise ProxyError("Only HTTP proxies are supported at the moment.", settings.proxy)
         
-        socket_host, socket_port = parse_target(settings.proxy, 80)
+        socket_host, socket_port = parse_target(settings.proxy, 8080) #80
 
         sock = socket.create_connection((socket_host, socket_port), timeout=settings.timeout_in_seconds)
-        sock.send(f"CONNECT {settings.host}:{settings.port} HTTP/1.1\r\nhost:{socket_host}\r\n\r\n".encode('utf-8'))
+        sock.send(f"CONNECT {settings.host}:{settings.port} HTTP/1.1\r\nhost:{socket_host}\r\nUser-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 YaBrowser/24.10.0.0 Safari/537.36\r\n\r\n".encode('utf-8'))
         sock_file = sock.makefile('r', newline='\r\n')
         line = sock_file.readline()
         if not re.fullmatch(r'HTTP/1\.[01] 200 Connection [Ee]stablished\r\n', line):
