@@ -1,3 +1,5 @@
+import re
+
 from scan import scan_server, ScanError, DEFAULT_TIMEOUT, DEFAULT_MAX_WORKERS, parse_target, ConnectionSettings, \
     to_json_obj
 from protocol import ClientHello
@@ -31,22 +33,23 @@ parser.add_argument("--protocols", "-p", dest='protocols_str', default=','.join(
                     help="comma separated list of TLS/SSL protocols to test")
 parser.add_argument("--proxy", default=None,
                     help="HTTP proxy to use for the connection, defaults to the env variable 'http_proxy' else no proxy")
-parser.add_argument("--verbose", "-v", action="count", default=0, help="increase output verbosity")
+parser.add_argument("--verbose", "-v", action="count", default=0, help="increase output verbosity (logging in log.txt file)")
 parser.add_argument("--progress", default=False, action=argparse.BooleanOptionalAction,
                     help="write lines with progress percentages to stderr")
 parser.add_argument("-l", default=False, action=argparse.BooleanOptionalAction,
                     help="scan the sites in the file -l <path_to_file>")
 args = parser.parse_args()
 
-logging.basicConfig(
-    datefmt='%Y-%m-%d %H:%M:%S',
-    format='{asctime}.{msecs:0<3.0f} {module} {threadName} {levelname}: {message}',
-    style='{',
-    level=[logging.WARNING, logging.INFO, logging.DEBUG][min(2, args.verbose)]
-)
-
 
 def scan(url: str):
+    logging.basicConfig(
+        datefmt='%Y-%m-%d %H:%M:%S',
+        format='{asctime}.{msecs:0<3.0f} {module} {threadName} {levelname}: {message}',
+        style='{',
+        level=[logging.WARNING, logging.INFO, logging.DEBUG][min(2, args.verbose)],
+        filename='log.txt',
+        filemode='w'
+    )
     if not args.protocols_str:
         parser.error("no protocols to test")
     try:
@@ -113,20 +116,34 @@ def read_urls_file(path_to_file: str):
                 sites_list.append(line.strip())
     except FileNotFoundError:
         print(f"File was not found: {path_to_file}")
+        raise
     except Exception as e:
         print(f"Error in open urls file: {e}")
+        raise
     return sites_list
 
 
 if args.l:
-    sites = read_urls_file(args.target)
-    # TO_DO create file results.txt
-    # check for regular expression "GOST" in str
-    # if not contain writes "site: www, gost_support: false"
-    # else "site: www, gost_support: true"
-    for site in sites:
-        results = scan(site)
-        print(results)
+    try:
+        sites = read_urls_file(args.target)
+        string_number = 0
+        report_file_name = 'report.txt'
+        if os.path.exists(report_file_name):
+            os.remove(report_file_name)
+        with open(report_file_name, 'a') as report_file:
+            for site in sites:
+                string_number = string_number + 1
+                results = str(scan(site))
+                match = re.search('GOST', results)
+                if match:
+                    print(f'site_order: {string_number} url: {site} "it looks like this site supports GOST"',
+                          file=report_file)
+                else:
+                    continue
+        print(f'\nThe scan is complete! Verify {string_number} websites. See "report.txt" file.')
+    except Exception as e:
+        print(f"Something went wrong: {e}")
+        raise
 
 else:
     results = scan(args.target)

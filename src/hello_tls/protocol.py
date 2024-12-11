@@ -5,13 +5,16 @@ from dataclasses import dataclass
 import logging
 import random
 
-from names_and_numbers import Protocol, RecordType, HandshakeType, CompressionMethod, CipherSuite, ExtensionType, Group, AlertLevel, AlertDescription, PskKeyExchangeMode
+from names_and_numbers import Protocol, RecordType, HandshakeType, CompressionMethod, CipherSuite, ExtensionType, Group, \
+    AlertLevel, AlertDescription, PskKeyExchangeMode
 
 logger = logging.getLogger(__name__)
+
 
 class ScanError(Exception):
     """ Base error class for errors that occur during scanning. """
     pass
+
 
 class ServerAlertError(ScanError):
     def __init__(self, level: AlertLevel, description: AlertDescription):
@@ -19,9 +22,11 @@ class ServerAlertError(ScanError):
         self.level = level
         self.description = description
 
+
 class BadServerResponse(ScanError):
     """ Error for server responses that can't be parsed. """
     pass
+
 
 @dataclass
 class ServerHello:
@@ -31,8 +36,10 @@ class ServerHello:
     cipher_suite: CipherSuite
     group: Optional[Group]
 
+
 def _bytes_to_int(b: bytes) -> int:
     return int.from_bytes(b, byteorder='big')
+
 
 def parse_server_hello(packets: Iterable[bytes]) -> ServerHello:
     """
@@ -40,7 +47,8 @@ def parse_server_hello(packets: Iterable[bytes]) -> ServerHello:
     """
     start = 0
     packets_iter = iter(packets)
-    data = next(packets_iter) # Buffer first packet.
+    data = next(packets_iter)  # Buffer first packet.
+
     def read_next(length: int) -> bytes:
         """ Returns the next `length` unparsed bytes. """
         nonlocal start, data
@@ -50,10 +58,10 @@ def parse_server_hello(packets: Iterable[bytes]) -> ServerHello:
                 data += next(packets_iter)
             except StopIteration:
                 raise BadServerResponse('Server response ended unexpectedly')
-        value = data[start:start+length]
+        value = data[start:start + length]
         start += length
         return value
-    
+
     if data.startswith(b'HTTP/'):
         raise BadServerResponse('Server responded with plaintext HTTP, not TLS', data)
 
@@ -66,10 +74,11 @@ def parse_server_hello(packets: Iterable[bytes]) -> ServerHello:
         alert_level = AlertLevel(read_next(1))
         alert_description = AlertDescription(read_next(1))
         raise ServerAlertError(alert_level, alert_description)
-    
+
     if record_type != RecordType.HANDSHAKE:
-        raise BadServerResponse(f'Server responded with unexpected Record Type, expected {RecordType.HANDSHAKE} but got {record_type}')
-    
+        raise BadServerResponse(
+            f'Server responded with unexpected Record Type, expected {RecordType.HANDSHAKE} but got {record_type}')
+
     handshake_type = HandshakeType(read_next(1))
     assert handshake_type == HandshakeType.server_hello, handshake_type
     server_hello_length = _bytes_to_int(read_next(3))
@@ -87,7 +96,7 @@ def parse_server_hello(packets: Iterable[bytes]) -> ServerHello:
     compression_method = CompressionMethod(read_next(1))
     if start + 2 <= record_end:
         extensions_length = _bytes_to_int(read_next(2))
-    else: # extensions may not be present in TLS 1.2 and lower
+    else:  # extensions may not be present in TLS 1.2 and lower
         extensions_length = 0
     extensions_end = start + extensions_length
 
@@ -109,16 +118,18 @@ def parse_server_hello(packets: Iterable[bytes]) -> ServerHello:
             except ValueError:
                 logger.warning(f'Unknown group: {extension_data[:2]!r}')
                 pass
-    
+
     return ServerHello(version, is_retry_request, compression_method, cipher_suite, group)
+
 
 @dataclass
 class ClientHello:
-    server_name: Optional[str] # No default value because you probably want to set this.
+    server_name: Optional[str]  # No default value because you probably want to set this.
     protocols: Sequence[Protocol] = tuple(Protocol)
     cipher_suites: Sequence[CipherSuite] = tuple(CipherSuite)
     groups: Sequence[Group] = tuple(Group)
     compression_methods: Sequence[CompressionMethod] = tuple(CompressionMethod)
+
 
 def make_client_hello(client_hello: ClientHello) -> bytes:
     """
@@ -134,26 +145,25 @@ def make_client_hello(client_hello: ClientHello) -> bytes:
     def prefix_length(block_name: str, width_bytes: int = 2) -> Iterator[None]:
         """ Inserts `width_bytes` bytes of zeros, and on exit fills it with the observed length. """
         start_index = len(octets)
-        octets.extend(width_bytes*[0])
+        octets.extend(width_bytes * [0])
         yield None
         length = len(octets) - start_index - width_bytes
-        octets[start_index:start_index+width_bytes] = length.to_bytes(width_bytes, byteorder="big")
-    
+        octets[start_index:start_index + width_bytes] = length.to_bytes(width_bytes, byteorder="big")
+
     octets.extend(RecordType.HANDSHAKE.value)
-    octets.extend(min(Protocol.TLS1_0, max(client_hello.protocols)).value) # Legacy record version: max TLS 1.0.
+    octets.extend(min(Protocol.TLS1_0, max(client_hello.protocols)).value)  # Legacy record version: max TLS 1.0.
     with prefix_length('record'):
         octets.extend(HandshakeType.client_hello.value)
-        
+
         with prefix_length('Client Hello', width_bytes=3):
-            octets.extend(min(Protocol.TLS1_2, max(client_hello.protocols)).value) # Legacy client version: max TLS 1.2.
-            octets.extend((int(datetime.datetime.now(datetime.UTC).timestamp())).to_bytes(4, 'big')) # Timestamp
-            octets.extend(random.randbytes(28)) # Random.
+            octets.extend(
+                min(Protocol.TLS1_2, max(client_hello.protocols)).value)  # Legacy client version: max TLS 1.2.
+            octets.extend((int(datetime.datetime.now(datetime.UTC).timestamp())).to_bytes(4, 'big'))  # Timestamp
+            octets.extend(random.randbytes(28))  # Random.
 
             with prefix_length('session ID', width_bytes=1):
-                pass
-                #octets.extend(32*[0x00]) # Legacy session ID. Any value will do.
-                #octets.extend(32*[0x07])
-                #octets.extend(b'\x00') #  length 0
+                pass  # octets.extend(32*[0x07])
+
             with prefix_length('cipher Suites'):
                 for cipher_suite in client_hello.cipher_suites:
                     octets.extend(cipher_suite.value)
@@ -172,13 +182,13 @@ def make_client_hello(client_hello: ClientHello) -> bytes:
                     octets.extend(ExtensionType.server_name.value)
                     with prefix_length('server_name extension'):
                         with prefix_length('server_name list'):
-                            octets.append(0x00) # Name type: host_name
+                            octets.append(0x00)  # Name type: host_name
                             with prefix_length('server_name'):
                                 octets.extend(client_hello.server_name.encode('ascii'))
 
                 octets.extend(ExtensionType.status_request.value)
                 with prefix_length('status_request extension'):
-                    octets.append(0x01) # Certificate status type: OCSP.
+                    octets.append(0x01)  # Certificate status type: OCSP.
                     with prefix_length('status_request responder ID list'):
                         pass
                     with prefix_length('status_request information'):
@@ -187,9 +197,9 @@ def make_client_hello(client_hello: ClientHello) -> bytes:
                 octets.extend(ExtensionType.ec_point_formats.value)
                 with prefix_length('EC point formats extension'):
                     with prefix_length('EC point formats list', width_bytes=1):
-                        octets.append(0x00) # EC point format: uncompressed.
-                        octets.append(0x01) # EC point format: ansiX962_compressed_prime.
-                        octets.append(0x02) # EC point format: ansiX962_compressed_char2.
+                        octets.append(0x00)  # EC point format: uncompressed.
+                        octets.append(0x01)  # EC point format: ansiX962_compressed_prime.
+                        octets.append(0x02)  # EC point format: ansiX962_compressed_char2.
 
                 octets.extend(ExtensionType.supported_groups.value)
                 with prefix_length('supported_groups extension'):
@@ -213,36 +223,36 @@ def make_client_hello(client_hello: ClientHello) -> bytes:
                 with prefix_length('signature algorithms extension'):
                     with prefix_length('signature algorithm list'):
                         octets.extend([
-                            0x04, 0x03, # ECDSA-SECP256r1-SHA256
-                            0x05, 0x03, # ECDSA-SECP384r1-SHA384
-                            0x06, 0x03, # ECDSA-SECP521r1-SHA512
-                            0x08, 0x07, # ED25519
-                            0x08, 0x08, # ED448
-                            0x08, 0x09, # RSA-PSS-PSS-SHA256
-                            0x08, 0x0a, # RSA-PSS-PSS-SHA384
-                            0x08, 0x0b, # RSA-PSS-PSS-SHA512
-                            0x08, 0x04, # RSA-PSS-RSAE-SHA256
-                            0x08, 0x05, # RSA-PSS-RSAE-SHA384
-                            0x08, 0x06, # RSA-PSS-RSAE-SHA512
-                            0x04, 0x01, # RSA-PKCS1-SHA256
-                            0x05, 0x01, # RSA-PKCS1-SHA384
-                            0x06, 0x01, # RSA-PKCS1-SHA512
-                            0x02, 0x01, # RSA-PKCS1-SHA1
-                            0x02, 0x03, # ECDSA-SHA1
+                            # 0x04, 0x03,  # ECDSA-SECP256r1-SHA256
+                            # 0x05, 0x03,  # ECDSA-SECP384r1-SHA384
+                            # 0x06, 0x03,  # ECDSA-SECP521r1-SHA512
+                            # 0x08, 0x07,  # ED25519
+                            # 0x08, 0x08,  # ED448
+                            # 0x08, 0x09,  # RSA-PSS-PSS-SHA256
+                            # 0x08, 0x0a,  # RSA-PSS-PSS-SHA384
+                            # 0x08, 0x0b,  # RSA-PSS-PSS-SHA512
+                            # 0x08, 0x04,  # RSA-PSS-RSAE-SHA256
+                            # 0x08, 0x05,  # RSA-PSS-RSAE-SHA384
+                            # 0x08, 0x06,  # RSA-PSS-RSAE-SHA512
+                            # 0x04, 0x01,  # RSA-PKCS1-SHA256
+                            # 0x05, 0x01,  # RSA-PKCS1-SHA384
+                            # 0x06, 0x01,  # RSA-PKCS1-SHA512
+                            # 0x02, 0x01,  # RSA-PKCS1-SHA1
+                            # 0x02, 0x03,  # ECDSA-SHA1
                             # https://www.ietf.org/archive/id/draft-smyshlyaev-tls13-gost-suites-08.html
-                            0x07, 0x03, # gostr34102012_256a
-                            0x07, 0x0A, # gostr34102012_256b
-                            0x07, 0x0B, # gostr34102012_256c
-                            0x07, 0x0C, # gostr34102012_256d
-                            0x07, 0x0D, # gostr34102012_512a
-                            0x07, 0x0E, # gostr34102012_512b
-                            0x07, 0x0F, # gostr34102012_512c
+                            0x07, 0x03,  # gostr34102012_256a
+                            0x07, 0x0A,  # gostr34102012_256b
+                            0x07, 0x0B,  # gostr34102012_256c
+                            0x07, 0x0C,  # gostr34102012_256d
+                            0x07, 0x0D,  # gostr34102012_512a
+                            0x07, 0x0E,  # gostr34102012_512b
+                            0x07, 0x0F,  # gostr34102012_512c
                             # https://www.ietf.org/rfc/rfc9189.html
-                            0xEE, 0xEE, # gostr34102012_256_old
-                            0x08, 0x40, # gostr34102012_256
-                            0xEF, 0xEF, # gostr34102012_512_old
-                            0x08, 0x41, # gostr34102012_512
-                            0xED, 0xED, # ?
+                            0xEE, 0xEE,  # gostr34102012_256_old
+                            0x08, 0x40,  # gostr34102012_256
+                            0xEF, 0xEF,  # gostr34102012_512_old
+                            0x08, 0x41,  # gostr34102012_512
+                            0xED, 0xED,  # something gost?
                         ])
 
                 octets.extend(ExtensionType.signed_certificate_timestamp.value)
@@ -262,8 +272,8 @@ def make_client_hello(client_hello: ClientHello) -> bytes:
                     with prefix_length('pre_shared_key_modes list', width_bytes=1):
                         octets.extend(PskKeyExchangeMode.psk_dhe_ke.value)
 
-                #uncommented code if you want to check anti man-in-the-middle protect support
-                #octets.extend(ExtensionType.renegotiation_info.value)
+                # uncommented code if you want to check anti man-in-the-middle protect support
+                # octets.extend(ExtensionType.renegotiation_info.value)
 
                 # https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.8
                 # "This vector MAY be empty if the client is requesting a HelloRetryRequest. ... Clients MUST
