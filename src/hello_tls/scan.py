@@ -7,7 +7,8 @@ from urllib.parse import urlparse
 
 import dataclasses
 from datetime import datetime, timezone
-from protocol import ClientHello, ScanError, make_client_hello, parse_server_hello, ServerAlertError, BadServerResponse, ServerHello, logger
+from protocol import ClientHello, ScanError, make_client_hello, parse_server_hello, ServerAlertError, BadServerResponse, \
+    ServerHello, logger
 from names_and_numbers import AlertDescription, CipherSuite, Group, Protocol, CompressionMethod
 
 # Default number of workers/threads/concurrent connections to use.
@@ -16,21 +17,26 @@ DEFAULT_MAX_WORKERS: int = 6
 # Default socket connection timeout, in seconds.
 DEFAULT_TIMEOUT: float = 2
 
+
 class DowngradeError(ScanError):
     """ Error for servers that attempt to downgrade beyond supported versions. """
     pass
+
 
 class ConnectionError(ScanError):
     """ Class for error in resolving or connecting to a server. """
     pass
 
+
 class ProxyError(ConnectionError):
     """ Class for errors in connecting through a proxy. """
     pass
 
+
 class EmptyServerResponse(ScanError):
     """ Error for servers that close the connection without sending any data. """
     pass
+
 
 @dataclasses.dataclass
 class ConnectionSettings:
@@ -43,11 +49,12 @@ class ConnectionSettings:
     timeout_in_seconds: Optional[float] = DEFAULT_TIMEOUT
     date: datetime = dataclasses.field(default_factory=lambda: datetime.now(tz=timezone.utc).replace(microsecond=0))
 
+
 def make_socket(settings: ConnectionSettings) -> socket.socket:
     """
     Creates and connects a socket to the target server, through the chosen proxy if any.
     """
-    socket_host, socket_port = None, None # To appease the type checker.
+    socket_host, socket_port = None, None  # To appease the type checker.
     try:
         if not settings.proxy:
             socket_host, socket_port = settings.host, settings.port
@@ -55,11 +62,15 @@ def make_socket(settings: ConnectionSettings) -> socket.socket:
 
         if not settings.proxy.startswith('http://'):
             raise ProxyError("Only HTTP proxies are supported at the moment.", settings.proxy)
-        
-        socket_host, socket_port = parse_target(settings.proxy, 8080) #80
+
+        socket_host, socket_port = parse_target(settings.proxy, 8080)  # 80
 
         sock = socket.create_connection((socket_host, socket_port), timeout=settings.timeout_in_seconds)
-        sock.send(f"CONNECT {settings.host}:{settings.port} HTTP/1.1\r\nhost:{socket_host}\r\nUser-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 YaBrowser/24.10.0.0 Safari/537.36\r\n\r\n".encode('utf-8'))
+        sock.send(
+            f"CONNECT {settings.host}:{settings.port} HTTP/1.1\r\nhost:{socket_host}\r\nUser-Agent:Mozilla/5.0 ("
+            f"Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 "
+            f"YaBrowser/24.10.0.0 Safari/537.36\r\n\r\n".encode(
+                'utf-8'))
         sock_file = sock.makefile('r', newline='\r\n')
         line = sock_file.readline()
         if not re.fullmatch(r'HTTP/1\.[01] 200 Connection [Ee]stablished\r\n', line):
@@ -70,12 +81,16 @@ def make_socket(settings: ConnectionSettings) -> socket.socket:
             if sock_file.readline() == '\r\n':
                 break
         return sock
-    except TimeoutError as e:
+    except TimeoutError as e:  # as e
         raise ConnectionError(f"Connection to {socket_host}:{socket_port} timed out after {settings.timeout_in_seconds} seconds") from e
-    except socket.gaierror as e:
+        # logger.info(f"Connection Error. Connection to {socket_host}:{socket_port} timed out after {settings.timeout_in_seconds} seconds")
+    except socket.gaierror as e:  # as e
         raise ConnectionError(f"Could not resolve host {socket_host}") from e
-    except socket.error as e:
+        # logger.info(f"Connection Error. Could not resolve host {socket_host}")
+    except socket.error as e:  # as e
         raise ConnectionError(f"Could not connect to {socket_host}:{socket_port}") from e
+        # logger.info(f"Connection Error. Could not connect to {socket_host}:{socket_port}")
+
 
 def send_hello(connection_settings: ConnectionSettings, client_hello: ClientHello) -> ServerHello:
     """
@@ -83,36 +98,43 @@ def send_hello(connection_settings: ConnectionSettings, client_hello: ClientHell
     Raises exceptions for the different alert messages the server can send.
     """
     sock = make_socket(connection_settings)
-    sock.send(make_client_hello(client_hello))
+    if sock:
+        sock.send(make_client_hello(client_hello))
 
-    def packet_stream() -> Iterator[bytes]:
-        bytes_read = 0
-        while True:
-            try:
-                packet = sock.recv(4096)
-            except (TimeoutError, ConnectionResetError) as e:
-                # tiktok.com times out when no matching groups are found.
-                # live.com sends a RST packet when no matching protocols are found.
-                raise EmptyServerResponse() from e
-            bytes_read += len(packet)
-            if packet:
-                yield packet
-            elif bytes_read == 0:
-                raise EmptyServerResponse()
-            else:
-                break
+        def packet_stream() -> Iterator[bytes]:
+            bytes_read = 0
+            while True:
+                try:
+                    packet = sock.recv(4096)
+                except (TimeoutError, ConnectionResetError) as e: # as e
+                    # tiktok.com times out when no matching groups are found.
+                    # live.com sends a RST packet when no matching protocols are found.
+                    raise EmptyServerResponse() from e
+                    # logger.info('Error empty server response')
+                bytes_read += len(packet)
+                if packet:
+                    yield packet
+                elif bytes_read == 0:
+                    raise EmptyServerResponse()
+                    # logger.info('Error empty server response')
+                else:
+                    break
 
-    try:
-        server_hello = parse_server_hello(packet_stream())
-    except ValueError as e:
-        raise BadServerResponse('Error parsing server response') from e
-    
-    if server_hello.version not in client_hello.protocols:
-        # Server picked a protocol we didn't ask for.
-        logger.info(f"Server attempted to downgrade protocol to unsupported version {server_hello.version}")
-        raise DowngradeError(f"Server attempted to downgrade from {client_hello.protocols} to {server_hello.version}")
-    
-    return server_hello
+        try:
+            server_hello = parse_server_hello(packet_stream())
+        except ValueError as e: # as e
+            raise BadServerResponse('Error parsing server response') from e
+            # logger.info('Error parsing server response')
+
+        if server_hello.version not in client_hello.protocols:
+            # Server picked a protocol we didn't ask for.
+            # logger.info(f"Server attempted to downgrade protocol to unsupported version {server_hello.version}")
+            raise DowngradeError(f"Server attempted to downgrade from {client_hello.protocols} to {server_hello.version}")
+
+        return server_hello
+    else:
+        pass
+
 
 def try_send_hello(connection_settings: ConnectionSettings, client_hello: ClientHello) -> Optional[ServerHello]:
     """
@@ -124,9 +146,13 @@ def try_send_hello(connection_settings: ConnectionSettings, client_hello: Client
         # ServerAlertError could technically be raised for a variety of reasons, but in practice
         # there's too much variation on how servers pick Alert Descriptions to reject a handshake.
         logger.debug(f'Server responded with error {e!r}')
+        # logger.info(f'Server responded with error {e!r}')
         return None
 
-def _iterate_server_option(connection_settings: ConnectionSettings, client_hello: ClientHello, request_option: str, response_option: str, on_response: Callable[[ServerHello], None] = lambda s: None) -> Iterator[Any]:
+
+def _iterate_server_option(connection_settings: ConnectionSettings, client_hello: ClientHello, request_option: str,
+                           response_option: str, on_response: Callable[[ServerHello], None] = lambda s: None) -> \
+        Iterator[Any]:
     """
     Continually sends Client Hello packets to the server, removing the `response_option` from the list of options each time,
     until the server rejects the handshake.
@@ -134,12 +160,14 @@ def _iterate_server_option(connection_settings: ConnectionSettings, client_hello
     # We'll be mutating the list of options, so make a copy.
     options_to_test = list(getattr(client_hello, request_option))
     # TODO: figure out how to have mypy accept this line.
-    client_hello = dataclasses.replace(client_hello, **{request_option: options_to_test}) # type: ignore
+    client_hello = dataclasses.replace(client_hello, **{request_option: options_to_test})  # type: ignore
 
-    logger.info(f"Enumerating server {response_option} with {len(options_to_test)} options and protocols {client_hello.protocols}")
+    logger.info(
+        f"Enumerating server {response_option} with {len(options_to_test)} options and protocols {client_hello.protocols}")
 
     while options_to_test:
-        logger.debug(f"Offering {len(options_to_test)} {response_option} over {client_hello.protocols}: {options_to_test}")
+        logger.debug(
+            f"Offering {len(options_to_test)} {response_option} over {client_hello.protocols}: {options_to_test}")
 
         server_hello = try_send_hello(connection_settings, client_hello)
 
@@ -156,7 +184,9 @@ def _iterate_server_option(connection_settings: ConnectionSettings, client_hello
         options_to_test.remove(accepted_option)
         yield accepted_option
 
-def enumerate_server_cipher_suites(connection_settings: ConnectionSettings, client_hello: ClientHello, on_response: Callable[[ServerHello], None] = lambda s: None) -> List[CipherSuite]:
+
+def enumerate_server_cipher_suites(connection_settings: ConnectionSettings, client_hello: ClientHello,
+                                   on_response: Callable[[ServerHello], None] = lambda s: None) -> List[CipherSuite]:
     """
     Given a list of cipher suites to test, sends a sequence of Client Hello packets to the server,
     removing the accepted cipher suite from the list each time.
@@ -164,13 +194,16 @@ def enumerate_server_cipher_suites(connection_settings: ConnectionSettings, clie
     """
     return list(_iterate_server_option(connection_settings, client_hello, 'cipher_suites', 'cipher_suite', on_response))
 
-def enumerate_server_groups(connection_settings: ConnectionSettings, client_hello: ClientHello, on_response: Callable[[ServerHello], None] = lambda s: None) -> Optional[List[Group]]:
+
+def enumerate_server_groups(connection_settings: ConnectionSettings, client_hello: ClientHello,
+                            on_response: Callable[[ServerHello], None] = lambda s: None) -> Optional[List[Group]]:
     """
     Given a list of groups to test, sends a sequence of Client Hello packets to the server,
     removing the accepted group from the list each time.
     Returns a list of all groups the server accepted.
     """
     return list(_iterate_server_option(connection_settings, client_hello, 'groups', 'group', on_response))
+
 
 @dataclasses.dataclass
 class Certificate:
@@ -193,6 +226,7 @@ class Certificate:
     extensions: dict[str, str]
     pem: str
 
+
 @dataclasses.dataclass
 class OpenSSLResponse:
     """
@@ -202,6 +236,7 @@ class OpenSSLResponse:
     server_certificate_chain: list[Certificate]
     # List of CA's accepted for client certificates, as dictionary of X509 names.
     client_ca_names: list[dict]
+
 
 def get_openssl_response(connection_settings: ConnectionSettings, client_hello: ClientHello) -> OpenSSLResponse:
     """
@@ -217,13 +252,15 @@ def get_openssl_response(connection_settings: ConnectionSettings, client_hello: 
     def _x509_time_to_datetime(x509_time: Optional[bytes]) -> datetime:
         if x509_time is None:
             raise BadServerResponse('Timestamp cannot be None')
+            # logger.info(f'Timestamp cannot be None')
         return datetime.strptime(x509_time.decode('ascii'), '%Y%m%d%H%M%SZ').replace(tzinfo=timezone.utc)
 
     def raw_openssl_cert_to_certificate(raw_cert, current_date: datetime) -> Certificate:
         """
         Converts a "raw" pyOpenSSL certificate into our Certificate dataclass.
         """
-        _public_key_type_by_openssl_id = {crypto.TYPE_DH: 'DH', crypto.TYPE_DSA: 'DSA', crypto.TYPE_EC: 'EC', crypto.TYPE_RSA: 'RSA'}
+        _public_key_type_by_openssl_id = {crypto.TYPE_DH: 'DH', crypto.TYPE_DSA: 'DSA', crypto.TYPE_EC: 'EC',
+                                          crypto.TYPE_RSA: 'RSA'}
 
         extensions: dict[str, str] = {}
         for i in range(raw_cert.get_extension_count()):
@@ -258,7 +295,7 @@ def get_openssl_response(connection_settings: ConnectionSettings, client_hello: 
             is_expired=raw_cert.has_expired(),
             days_until_expiration=days_until_expiration,
         )
-    
+
     no_flag_by_protocol = {
         Protocol.SSLv3: SSL.OP_NO_SSLv3,
         Protocol.TLS1_0: SSL.OP_NO_TLSv1,
@@ -271,10 +308,11 @@ def get_openssl_response(connection_settings: ConnectionSettings, client_hello: 
         # This order of operations is necessary to work around a pyOpenSSL bug:
         # https://github.com/pyca/pyopenssl/issues/168#issuecomment-289194607
         context = SSL.Context(SSL.TLS_CLIENT_METHOD)
-        forbidden_versions = sum(no_flag_by_protocol[protocol] for protocol in Protocol if protocol not in client_hello.protocols)
+        forbidden_versions = sum(
+            no_flag_by_protocol[protocol] for protocol in Protocol if protocol not in client_hello.protocols)
         context.set_options(forbidden_versions)
         connection = SSL.Connection(context, sock)
-        connection.set_connect_state()        
+        connection.set_connect_state()
         # Necessary for servers that expect SNI. Otherwise expect "tlsv1 alert internal error".
         if client_hello.server_name is not None:
             connection.set_tlsext_host_name(client_hello.server_name.encode('utf-8'))
@@ -286,10 +324,12 @@ def get_openssl_response(connection_settings: ConnectionSettings, client_hello: 
                 rd, _, _ = select.select([sock], [], [], sock.gettimeout())
                 if not rd:
                     raise ConnectionError('Timed out during handshake for certificate chain') from e
+                    # logger.info(f'Timed out during handshake for certificate chain')
                 continue
             except (SSL.Error, SSL.SysCallError) as e:
                 # live.com sends a RST packet when no matching protocols are found.
                 raise ConnectionError(f'OpenSSL exception during handshake for certificate chain: {e}') from e
+                # logger.info(f'OpenSSL exception during handshake for certificate chain: {e}')
         connection.shutdown()
 
     raw_certs = connection.get_peer_cert_chain()
@@ -297,21 +337,26 @@ def get_openssl_response(connection_settings: ConnectionSettings, client_hello: 
 
     if raw_certs is None:
         raise BadServerResponse('Server did not give any certificate chain')
-    
+        # logger.info(f'Server did not give any certificate chain')
+
     logger.info(f"Received {len(raw_certs)} certificates and {len(raw_client_ca_names)} client CA's")
 
     return OpenSSLResponse(
-        server_certificate_chain=[raw_openssl_cert_to_certificate(raw_cert, connection_settings.date) for raw_cert in raw_certs],
+        server_certificate_chain=[raw_openssl_cert_to_certificate(raw_cert, connection_settings.date) for raw_cert in
+                                  raw_certs],
         client_ca_names=[_x509_name_to_dict(raw_client_ca_name) for raw_client_ca_name in raw_client_ca_names],
         # TODO: can we include ALPN protocol in response? I haven't found a public server to test it yet.
-        #alpn_proto_negotiated=connection.get_alpn_proto_negotiated(),
-    )    
-    
-def get_server_certificate_chain(connection_settings: ConnectionSettings, client_hello: ClientHello) -> Iterable[Certificate]:
+        # alpn_proto_negotiated=connection.get_alpn_proto_negotiated(),
+    )
+
+
+def get_server_certificate_chain(connection_settings: ConnectionSettings, client_hello: ClientHello) -> Iterable[
+    Certificate]:
     """
     Use socket and pyOpenSSL to get the server certificate chain.
     """
     return get_openssl_response(connection_settings, client_hello).server_certificate_chain
+
 
 @dataclasses.dataclass
 class ProtocolResult:
@@ -327,6 +372,7 @@ class ProtocolResult:
         self._cipher_suite_hellos: List[ServerHello] = []
         self._group_hellos: List[ServerHello] = []
 
+
 @dataclasses.dataclass
 class ServerScanResult:
     connection: ConnectionSettings
@@ -336,16 +382,17 @@ class ServerScanResult:
     client_ca_names: list[dict]
     certificate_chain: list[Certificate]
 
+
 def scan_server(
-    connection_settings: Union[ConnectionSettings, str],
-    client_hello: Optional[ClientHello] = None,
-    do_enumerate_cipher_suites: bool = True,
-    do_enumerate_groups: bool = True,
-    do_test_sni: bool = True,
-    fetch_cert_chain: bool = True,
-    max_workers: int = DEFAULT_MAX_WORKERS,
-    progress: Callable[[int, int], None] = lambda current, total: None,
-    ) -> ServerScanResult:
+        connection_settings: Union[ConnectionSettings, str],
+        client_hello: Optional[ClientHello] = None,
+        do_enumerate_cipher_suites: bool = True,
+        do_enumerate_groups: bool = True,
+        do_test_sni: bool = True,
+        fetch_cert_chain: bool = True,
+        max_workers: int = DEFAULT_MAX_WORKERS,
+        progress: Callable[[int, int], None] = lambda current, total: None,
+) -> ServerScanResult:
     """
     Scans a SSL/TLS server for supported protocols, cipher suites, and certificate chain.
 
@@ -355,11 +402,11 @@ def scan_server(
     """
     if isinstance(connection_settings, str):
         connection_settings = ConnectionSettings(*parse_target(connection_settings))
-        
+
     logger.info(f"Scanning {connection_settings.host}:{connection_settings.port}")
 
     if not client_hello:
-        client_hello = ClientHello(server_name=connection_settings.host)            
+        client_hello = ClientHello(server_name=connection_settings.host)
 
     tmp_protocol_results = {p: ProtocolResult(False, None, None, None, None) for p in Protocol}
 
@@ -382,19 +429,27 @@ def scan_server(
             suites_to_test = [cs for cs in CipherSuite if protocol in cs.protocols]
 
             if do_enumerate_cipher_suites:
-                cipher_suite_hello = dataclasses.replace(client_hello, protocols=[protocol], cipher_suites=suites_to_test)
+                cipher_suite_hello = dataclasses.replace(client_hello, protocols=[protocol],
+                                                         cipher_suites=suites_to_test)
+
                 # Save the cipher suites to protocol results, and store each Server Hello for post-processing of other options.
                 def task():
-                    cipher_suites = enumerate_server_cipher_suites(connection_settings, cipher_suite_hello, protocol_result._cipher_suite_hellos.append)
+                    cipher_suites = enumerate_server_cipher_suites(connection_settings, cipher_suite_hello,
+                                                                   protocol_result._cipher_suite_hellos.append)
                     protocol_result.cipher_suites = cipher_suites
+
                 tasks.append(task)
 
             if do_enumerate_groups:
                 # Submit reversed list of cipher suites when checking for groups, to detect servers that respect user cipher suite order.
-                group_hello = dataclasses.replace(client_hello, protocols=[protocol], cipher_suites=list(reversed(suites_to_test)))
+                group_hello = dataclasses.replace(client_hello, protocols=[protocol],
+                                                  cipher_suites=list(reversed(suites_to_test)))
+
                 def task():
-                    groups = enumerate_server_groups(connection_settings, group_hello, protocol_result._group_hellos.append)
+                    groups = enumerate_server_groups(connection_settings, group_hello,
+                                                     protocol_result._group_hellos.append)
                     protocol_result.groups = groups or None
+
                 tasks.append(task)
 
         for protocol in client_hello.protocols:
@@ -405,10 +460,13 @@ def scan_server(
             # Send Client Hello with missing/wrong SNI.
             def task():
                 logger.debug(f"Sending Client Hello with no Server Name Indication")
-                result.requires_sni = not try_send_hello(connection_settings, dataclasses.replace(client_hello, server_name=None))
+                result.requires_sni = not try_send_hello(connection_settings,
+                                                         dataclasses.replace(client_hello, server_name=None))
 
                 logger.debug(f"Sending Client Hello with bad Server Name Indication")
-                result.accepts_bad_sni = bool(try_send_hello(connection_settings, dataclasses.replace(client_hello, server_name='bad-sni.example.com')))
+                result.accepts_bad_sni = bool(try_send_hello(connection_settings, dataclasses.replace(client_hello,
+                                                                                                      server_name='bad-sni.example.com')))
+
             tasks.append(task)
 
         if fetch_cert_chain:
@@ -416,6 +474,7 @@ def scan_server(
                 openssl_response = get_openssl_response(connection_settings, client_hello)
                 result.client_ca_names = openssl_response.client_ca_names
                 result.certificate_chain = openssl_response.server_certificate_chain
+
             tasks.append(do_openssl_handshake)
 
         if max_workers > len(tasks):
@@ -423,7 +482,7 @@ def scan_server(
 
         # Process tasks out of order, wait for all of them to finish, and stop on first exception.
         for i, _ in enumerate(pool.imap_unordered(lambda t: t(), tasks)):
-            progress(i+1, len(tasks))
+            progress(i + 1, len(tasks))
 
     # Finish processing the Server Hellos to detect compression and cipher suite order.
     for protocol, protocol_result in tmp_protocol_results.items():
@@ -432,7 +491,7 @@ def scan_server(
             continue
 
         result.protocols[protocol] = protocol_result
-        
+
         sample_hello = (protocol_result._cipher_suite_hellos or protocol_result._group_hellos)[0]
         protocol_result.has_compression = sample_hello.compression != CompressionMethod.NULL
 
@@ -442,11 +501,13 @@ def scan_server(
         # The cipher suites in cipher_suite_hellos and group_hellos were sent in reversed order.
         # If the server accepted different cipher suites, then we know it respects the client order.
         if protocol_result.cipher_suites and protocol_result.groups:
-            protocol_result.has_cipher_suite_order = protocol_result._cipher_suite_hellos[0].cipher_suite == protocol_result._group_hellos[0].cipher_suite
+            protocol_result.has_cipher_suite_order = protocol_result._cipher_suite_hellos[0].cipher_suite == \
+                                                     protocol_result._group_hellos[0].cipher_suite
 
     return result
 
-def parse_target(target:str, default_port:int = 443) -> tuple[str, int]:
+
+def parse_target(target: str, default_port: int = 443) -> tuple[str, int]:
     """
     Parses the target string into a host and port, stripping protocol and path.
     """
@@ -459,6 +520,7 @@ def parse_target(target:str, default_port:int = 443) -> tuple[str, int]:
     host = url.hostname or 'localhost'
     port = url.port if url.port else default_port
     return host, port
+
 
 def to_json_obj(o: Any) -> Any:
     """

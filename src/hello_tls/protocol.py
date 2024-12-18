@@ -58,12 +58,14 @@ def parse_server_hello(packets: Iterable[bytes]) -> ServerHello:
                 data += next(packets_iter)
             except StopIteration:
                 raise BadServerResponse('Server response ended unexpectedly')
+                # logger.info('Error server response ended unexpectedly')
         value = data[start:start + length]
         start += length
         return value
 
     if data.startswith(b'HTTP/'):
         raise BadServerResponse('Server responded with plaintext HTTP, not TLS', data)
+        # logger.info(f'Error server responded with plaintext HTTP, not TLS {data}')
 
     record_type = RecordType(read_next(1))
     legacy_record_version = read_next(2)
@@ -74,10 +76,12 @@ def parse_server_hello(packets: Iterable[bytes]) -> ServerHello:
         alert_level = AlertLevel(read_next(1))
         alert_description = AlertDescription(read_next(1))
         raise ServerAlertError(alert_level, alert_description)
+        # logger.info(f'Server Alert Error {alert_level}, {alert_description}')
 
     if record_type != RecordType.HANDSHAKE:
         raise BadServerResponse(
             f'Server responded with unexpected Record Type, expected {RecordType.HANDSHAKE} but got {record_type}')
+        # logger.info(f'Server responded with unexpected Record Type, expected {RecordType.HANDSHAKE} but got {record_type}')
 
     handshake_type = HandshakeType(read_next(1))
     assert handshake_type == HandshakeType.server_hello, handshake_type

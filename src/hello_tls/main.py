@@ -1,16 +1,21 @@
 import re
 
+from chardet import UniversalDetector
+
 from scan import scan_server, ScanError, DEFAULT_TIMEOUT, DEFAULT_MAX_WORKERS, parse_target, ConnectionSettings, \
     to_json_obj
 from protocol import ClientHello
 from names_and_numbers import Protocol
+# from urllib.parse import quote
 
 import os
 import sys
 import json
 import logging
 import argparse
+import idna
 from typing import Optional
+import chardet
 
 parser = argparse.ArgumentParser(prog="python -m hello_tls", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("target",
@@ -33,7 +38,8 @@ parser.add_argument("--protocols", "-p", dest='protocols_str', default=','.join(
                     help="comma separated list of TLS/SSL protocols to test")
 parser.add_argument("--proxy", default=None,
                     help="HTTP proxy to use for the connection, defaults to the env variable 'http_proxy' else no proxy")
-parser.add_argument("--verbose", "-v", action="count", default=0, help="increase output verbosity (logging in log.txt file)")
+parser.add_argument("--verbose", "-v", action="count", default=0,
+                    help="increase output verbosity (logging in log.txt file)")
 parser.add_argument("--progress", default=False, action=argparse.BooleanOptionalAction,
                     help="write lines with progress percentages to stderr")
 parser.add_argument("-l", default=False, action=argparse.BooleanOptionalAction,
@@ -50,6 +56,7 @@ def scan(url: str):
         filename='log.txt',
         filemode='w'
     )
+    error_file = open('error.txt', 'a')
     if not args.protocols_str:
         parser.error("no protocols to test")
     try:
@@ -101,17 +108,18 @@ def scan(url: str):
         )
         return results
     except ScanError as e:
-        print(f'Scan error: {e.args[0]}', file=sys.stderr)
+        print(f'Scan error: {e.args[0]}', file=error_file)  # sys.stderr
         if args.verbose > 0:
             raise
         else:
             exit(1)
 
 
-def read_urls_file(path_to_file: str):
+def read_urls_file(path_to_file: str) -> list:
     sites_list = []
     try:
-        with open(path_to_file, 'r', encoding='utf-8') as file:
+        encoding = detect_file_encoding(path_to_file)
+        with open(path_to_file, 'r', encoding=encoding) as file:
             for line in file:
                 sites_list.append(line.strip())
     except FileNotFoundError:
@@ -123,27 +131,51 @@ def read_urls_file(path_to_file: str):
     return sites_list
 
 
+def detect_file_encoding(file_path) -> str:
+    with open(file_path, 'rb') as f:
+        raw_data = f.read()
+        result = chardet.detect(raw_data)
+        encoding = result['encoding']
+        return encoding
+
+
+def print_status(index: int, sites: list, placeholder_size: int):
+    percentage = (index + 1) / len(sites) * 100
+    if index % (len(sites) // 15) == 0:
+        print(f'{placeholder_size * "."}{int(percentage)}%')
+
+
 if args.l:
-    try:
-        sites = read_urls_file(args.target)
-        string_number = 0
-        report_file_name = 'report.txt'
-        if os.path.exists(report_file_name):
-            os.remove(report_file_name)
-        with open(report_file_name, 'a') as report_file:
-            for site in sites:
+    sites = read_urls_file(args.target)
+    string_number = 0
+    placeholder_size = 0
+    report_file_name = 'report.txt'
+    pattern_cyrillic = r'[а-яА-ЯёЁ]'
+    if os.path.exists(report_file_name):
+        os.remove(report_file_name)
+    with open(report_file_name, 'a') as report_file:
+        print(f'\nTotal number of entries: {len(sites)}. Start scanning...')
+        for index, site in enumerate(sites):
+            try:
                 string_number = string_number + 1
-                results = str(scan(site))
+                if len(sites) > 15:
+                    print_status(index, sites, placeholder_size)
+                    placeholder_size = placeholder_size + 1
+                if re.search(pattern_cyrillic, site):
+                    site_cyr = idna.encode(site.lower())
+                    results = str(scan(site_cyr.decode()))
+                else:
+                    results = str(scan(site.lower()))
                 match = re.search('GOST', results)
                 if match:
                     print(f'site_order: {string_number} url: {site} "it looks like this site supports GOST"',
                           file=report_file)
                 else:
                     continue
-        print(f'\nThe scan is complete! Verify {string_number} websites. See "report.txt" file.')
-    except Exception as e:
-        print(f"Something went wrong: {e}")
-        raise
+            except Exception as e:
+                continue
+    print(f'\nThe scan is complete! Verify {string_number} websites. See "report.txt" file.')
+    print(f'See problems in "log.txt" file and errors in "errors.txt" file.')
 
 else:
     results = scan(args.target)
