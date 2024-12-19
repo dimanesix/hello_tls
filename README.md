@@ -8,13 +8,13 @@ Errors are output to a file "errors.txt" and logs are outputs to file "log.txt"
 
 ## Installation
 
-Run hello_gost.exe
-   <li>hello_tls.exe --timeout 5 --no-certs --no-enumerate-groups --no-test-sni -l sites.txt</li>
-   timeout - waiting for a response from the server
-   no-certs - without certificate chain check
-   no-enumerate-groups - without groups check
-   no-test-sni - without SNI check
-   -l <sites_list_file> - test websites from list 
+Run <b>hello_gost.exe</b>
+   <p>hello_tls.exe --timeout 5 --no-certs --no-enumerate-groups --no-test-sni -l sites.txt<p>
+   <ul><li>timeout - waiting for a response from the server</li>
+   <li>no-certs - without certificate chain check</li>
+   <li>no-enumerate-groups - without groups check</li>
+   <li>no-test-sni - without SNI check</li>
+   <li>-l <sites_list_file> - test websites from list</li></ul> 
 
 ## Requirements
 
