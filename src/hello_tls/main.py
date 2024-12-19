@@ -17,6 +17,10 @@ import idna
 from typing import Optional
 import chardet
 
+error_file_name = 'error.txt'
+
+log_file_name = 'log.txt'
+
 parser = argparse.ArgumentParser(prog="python -m hello_tls", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("target",
                     help="server to scan, in the form of 'example.com', 'example.com:443', or even a full URL")
@@ -46,6 +50,13 @@ parser.add_argument("-l", default=False, action=argparse.BooleanOptionalAction,
                     help="scan the sites in the file -l <path_to_file>")
 args = parser.parse_args()
 
+if os.path.exists(error_file_name):
+    os.remove(error_file_name)
+error_file = open(error_file_name, 'a')
+
+if os.path.exists(log_file_name):
+    os.remove(log_file_name)
+
 
 def scan(url: str):
     logging.basicConfig(
@@ -56,7 +67,7 @@ def scan(url: str):
         filename='log.txt',
         filemode='w'
     )
-    error_file = open('error.txt', 'a')
+    # error_file = open('error.txt', 'a')
     if not args.protocols_str:
         parser.error("no protocols to test")
     try:
@@ -108,7 +119,7 @@ def scan(url: str):
         )
         return results
     except ScanError as e:
-        print(f'Scan error: {e.args[0]}', file=error_file)  # sys.stderr
+        print(f'Scan error: {e.args[0]}', end=' ', file=error_file)  # sys.stderr
         if args.verbose > 0:
             raise
         else:
@@ -173,6 +184,7 @@ if args.l:
                 else:
                     continue
             except Exception as e:
+                print(f'(order: {string_number} url: {site})', file=error_file)
                 continue
     print(f'\nThe scan is complete! Verify {string_number} websites. See "report.txt" file.')
     print(f'See problems in "log.txt" file and errors in "errors.txt" file.')
