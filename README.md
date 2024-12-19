@@ -19,6 +19,7 @@ Run hello_gost.exe
 list_of_sites_file ("sites.txt") format:
    <br>www.yandex.ru
    <br>www.sberbank.ru
+   <br>сбер.рф
    <br>...
 
 ## Requirements
