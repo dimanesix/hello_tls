@@ -17,9 +17,9 @@ Run hello_gost.exe
    <li>-l [list_of_sites_file] - test websites from list</li></ul>
 
 list_of_sites_file ("sites.txt") format:
-   www.yandex.ru
-   www.sberbank.ru
-   ...
+   <p>www.yandex.ru</p>
+   <p>www.sberbank.ru</p>
+   <p>...</p>
 
 ## Requirements
 
