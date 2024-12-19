@@ -14,7 +14,12 @@ Run hello_gost.exe
    <li>no-certs - without certificate chain check</li>
    <li>no-enumerate-groups - without groups check</li>
    <li>no-test-sni - without SNI check</li>
-   <li>-l [sites_list_file] - test websites from list</li></ul> 
+   <li>-l [list_of_sites_file] - test websites from list</li></ul>
+
+list_of_sites_file ("sites.txt") format:
+   www.yandex.ru
+   www.sberbank.ru
+   ...
 
 ## Requirements
 
