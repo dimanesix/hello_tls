@@ -277,7 +277,7 @@ def make_client_hello(client_hello: ClientHello) -> bytes:
                         octets.extend(PskKeyExchangeMode.psk_dhe_ke.value)
 
                 # uncommented code if you want to check anti man-in-the-middle protect support
-                # octets.extend(ExtensionType.renegotiation_info.value)
+                octets.extend(ExtensionType.renegotiation_info.value)
 
                 # https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.8
                 # "This vector MAY be empty if the client is requesting a HelloRetryRequest. ... Clients MUST

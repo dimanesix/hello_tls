@@ -150,10 +150,13 @@ def detect_file_encoding(file_path) -> str:
         return encoding
 
 
-def print_status(index: int, sites: list, placeholder_size: int):
+def print_status(index: int, sites: list, placeholder_size: int) -> int:
     percentage = (index + 1) / len(sites) * 100
     if index % (len(sites) // 15) == 0:
         print(f'{placeholder_size * "."}{int(percentage)}%')
+        return placeholder_size + 1
+    else:
+        return placeholder_size
 
 
 if args.l:
@@ -170,8 +173,9 @@ if args.l:
             try:
                 string_number = string_number + 1
                 if len(sites) > 15:
-                    print_status(index, sites, placeholder_size)
-                    placeholder_size = placeholder_size + 1
+                    #print_status(index, sites, placeholder_size)
+                    #placeholder_size = placeholder_size + 1 #
+                    placeholder_size = print_status(index, sites, placeholder_size)
                 if re.search(pattern_cyrillic, site):
                     site_cyr = idna.encode(site.lower())
                     results = str(scan(site_cyr.decode()))
